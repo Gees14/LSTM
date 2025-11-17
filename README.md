@@ -19,9 +19,9 @@ dataset/
 checkpoints/
 └── action_lstm_ucf101.pth
 
-main.py # Entrenamiento y evaluación
+main.py   # Entrenamiento y evaluación
 
-inference.py # Predicción (inferencias)
+inference.py   # Predicción (inferencias)
 
 README.md
 
@@ -57,11 +57,11 @@ Desempeño general:
 
 Ejecuta en la terminal:
 
-*python main.py*
+`python main.py`
 
 Los pesos del modelo entrenado se guardarán en:
 
-*checkpoints/action_lstm_ucf101.pth*
+`checkpoints/action_lstm_ucf101.pth`
 
 ---
 
@@ -69,10 +69,17 @@ Los pesos del modelo entrenado se guardarán en:
 
 Ejecuta:
 
-*python inference.py*
+ `python inference.py`
 
 Para probar diferentes videos del conjunto de prueba, cambia el parámetro `idx` dentro de `inference.py`.
 
+---
+
+## 📦 Dependencias necesarias
+
+Instala las librerías requeridas:
+
+ `pip install torch numpy tqdm scikit-learn`
 
 ---
 
