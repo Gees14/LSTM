@@ -66,13 +66,12 @@ def predict_sample(model, dataset, device, idx=0, topk=5):
 
 
 if __name__ == "__main__":
-    # Cambia el nombre del checkpoint si guardaste otro (por ejemplo el _best)
     checkpoint_path = r"Modulo_ML\Modulo2_DeepL\checkpoints\action_lstm_ucf101.pth"
-    # o: checkpoint_path = "checkpoints/action_lstm_ucf101_best.pth"
 
     model, test_dataset, device = load_trained_model(checkpoint_path)
 
     # Probar con algunos ejemplos
     predict_sample(model, test_dataset, device, idx=0, topk=5)
     predict_sample(model, test_dataset, device, idx=10, topk=5)
+
     predict_sample(model, test_dataset, device, idx=25, topk=5)
