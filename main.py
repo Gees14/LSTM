@@ -15,7 +15,7 @@ from tqdm import tqdm
 #  Configuración general
 # ==========================
 
-PKL_PATH = r"Modulo_ML\Modulo2_DeepL\dataset\ucf101_2d.pkl"
+PKL_PATH = r"Modulo2_DeepL\dataset\ucf101_2d.pkl" 
 SPLIT_TRAIN = "train1"
 SPLIT_TEST = "test1"
 MAX_SEQ_LEN = 120          # número máximo de frames por video (ajustable)
@@ -23,6 +23,8 @@ BATCH_SIZE = 32
 NUM_EPOCHS = 20
 LR = 1e-3
 NUM_CLASSES = 101          # UCF101 → 101 clases
+
+MODEL_TYPE = "lstm"         # opciones: "lstm" o "mlp"
 
 
 # ==========================
@@ -47,6 +49,22 @@ class UCF101SkeletonDataset(Dataset):
 
         annotations: List[Dict[str, Any]] = data["annotations"]
         split: Dict[str, List[str]] = data["split"]
+
+        # Construir mapa label -> nombre de clase usando frame_dir
+        # Ejemplo de frame_dir: "v_ApplyEyeMakeup_g08_c01"
+        self.label_to_name = {}
+        for ann in annotations:
+            label = int(ann["label"])
+            frame_dir = ann["frame_dir"]  # string
+
+            name_raw = frame_dir
+            if name_raw.startswith("v_"):
+                name_raw = name_raw[2:]  # quitar "v_"
+            # separar por "_g" para quitar la parte de grupo y cámara
+            action_name = name_raw.split("_g")[0]
+
+            if label not in self.label_to_name:
+                self.label_to_name[label] = action_name
 
         # Mapeo de frame_dir → anotación
         self.by_name = {ann["frame_dir"]: ann for ann in annotations}
@@ -86,8 +104,6 @@ class UCF101SkeletonDataset(Dataset):
 
         # Normalización simple: escalamos por la resolución original
         # para tener valores aproximadamente entre 0 y 1
-        # (opcional, puedes cambiar esto después)
-        # original_shape = ann["original_shape"]  # (h, w)
         h, w = ann["original_shape"]
         kp_norm = np.empty_like(kp, dtype=np.float32)
         kp_norm[..., 0] = kp[..., 0] / w   # x / ancho
@@ -116,6 +132,10 @@ class UCF101SkeletonDataset(Dataset):
         y = torch.tensor(label, dtype=torch.long)
 
         return x, mask, y
+
+    def get_class_name(self, label: int) -> str:
+        label = int(label)
+        return self.label_to_name.get(label, f"class_{label}")
 
 
 # ==========================
@@ -148,7 +168,6 @@ class ActionLSTM(nn.Module):
         """
         if mask is not None:
             lengths = mask.sum(dim=1).long()  # [B]
-            # pack_padded_sequence requiere que esté en CPU
             packed = nn.utils.rnn.pack_padded_sequence(
                 x, lengths.cpu(), batch_first=True, enforce_sorted=False
             )
@@ -158,7 +177,6 @@ class ActionLSTM(nn.Module):
 
         # h_n: [num_layers * num_directions, B, hidden_dim]
         if self.bidirectional:
-            # concatenamos las últimas capas forward y backward
             h_forward = h_n[-2]   # [B, hidden_dim]
             h_backward = h_n[-1]  # [B, hidden_dim]
             h_last = torch.cat([h_forward, h_backward], dim=1)  # [B, 2*hidden_dim]
@@ -166,6 +184,41 @@ class ActionLSTM(nn.Module):
             h_last = h_n[-1]      # [B, hidden_dim]
 
         logits = self.fc(h_last)  # [B, num_classes]
+        return logits
+
+
+# ==========================
+#  MLP Temporal simple
+# ==========================
+
+class ActionMLP(nn.Module):
+    """
+    Baseline simple: hace un pooling temporal (media ponderada por mask)
+    y pasa el resultado por un MLP.
+    """
+    def __init__(self, input_dim: int, hidden_dim: int = 128,
+                 num_classes: int = 101, dropout: float = 0.3):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x, mask=None):
+        """
+        x: [B, T, F]
+        mask: [B, T] con 1 donde hay datos válidos, 0 en padding
+        """
+        if mask is not None:
+            m = mask.unsqueeze(-1)        # [B, T, 1]
+            x = x * m
+            lengths = m.sum(dim=1).clamp(min=1.0)  # [B, 1]
+            x = x.sum(dim=1) / lengths            # [B, F]
+        else:
+            x = x.mean(dim=1)                      # [B, F]
+
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        logits = self.fc2(x)                       # [B, num_classes]
         return logits
 
 
@@ -233,6 +286,7 @@ def evaluate(model, loader, criterion, device):
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Usando dispositivo: {device}")
+    print(f"Entrenando modelo: {MODEL_TYPE}")
 
     # Cargar datasets
     train_dataset = UCF101SkeletonDataset(PKL_PATH, SPLIT_TRAIN, MAX_SEQ_LEN)
@@ -249,14 +303,25 @@ def main():
 
     # Crear modelo
     input_dim = train_dataset.feature_dim
-    model = ActionLSTM(
-        input_dim=input_dim,
-        hidden_dim=128,
-        num_layers=2,
-        num_classes=NUM_CLASSES,
-        bidirectional=True,
-        dropout=0.3
-    ).to(device)
+
+    if MODEL_TYPE == "lstm":
+        model = ActionLSTM(
+            input_dim=input_dim,
+            hidden_dim=128,
+            num_layers=2,
+            num_classes=NUM_CLASSES,
+            bidirectional=True,
+            dropout=0.3
+        ).to(device)
+    elif MODEL_TYPE == "mlp":
+        model = ActionMLP(
+            input_dim=input_dim,
+            hidden_dim=128,
+            num_classes=NUM_CLASSES,
+            dropout=0.3
+        ).to(device)
+    else:
+        raise ValueError(f"MODEL_TYPE desconocido: {MODEL_TYPE}")
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
@@ -277,8 +342,10 @@ def main():
 
     # Guardar modelo
     os.makedirs("checkpoints", exist_ok=True)
-    torch.save(model.state_dict(), os.path.join("checkpoints", "action_lstm_ucf101.pth"))
-    print("Modelo guardado en checkpoints/action_lstm_ucf101.pth")
+    ckpt_name = f"action_{MODEL_TYPE}_ucf101.pth"
+    ckpt_path = os.path.join("checkpoints", ckpt_name)
+    torch.save(model.state_dict(), ckpt_path)
+    print(f"Modelo guardado en {ckpt_path}")
 
 
 if __name__ == "__main__":
