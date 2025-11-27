@@ -3,11 +3,12 @@
 Este proyecto implementa un modelo de deep learning para la clasificación de acciones humanas utilizando el dataset **UCF101 Skeleton 2D**, basado en coordenadas de 17 puntos clave (keypoints) por frame.
 
 El sistema desarrollado incluye:
-- Preprocesamiento de datos
-- Modelo ActionLSTM (LSTM bidireccional)
+- Preprocesamiento de keypoints 2D
+- Modelo **ActionLSTM** (LSTM bidireccional)
+- Modelo **ActionMLP** (temporal pooling + MLP)
 - Entrenamiento usando PyTorch
-- Evaluación del modelo
-- Script de inferencia para generar predicciones Top-5
+- Evaluación cuantitativa del modelo
+- Script de inferencia con nombres de clase para generar predicciones Top-5 
 
 ---
 
@@ -18,6 +19,7 @@ dataset/
 
 checkpoints/
 └── action_lstm_ucf101.pth
+└── action_mlp_ucf101.pth
 
 main.py   # Entrenamiento y evaluación
 
@@ -27,11 +29,13 @@ README.md
 
 ---
 
-## 🧠 Modelo: ActionLSTM
+## 🧠 Modelos Implementados
+
+### 🔹 1) **ActionLSTM (modelo principal)**   
 
 ActionLSTM es un modelo basado en un LSTM bidireccional, diseñado para capturar dependencias temporales en secuencias de poses humanas.
 
-Características principales:
+**Características:**
 - LSTM bidireccional  
 - 2 capas recurrentes  
 - 128 unidades ocultas  
@@ -41,15 +45,43 @@ Características principales:
 
 ---
 
+### 🔹 2) **ActionMLP (baseline adicional)**  
+
+Implementado para comparar arquitecturas del proyecto.
+
+**Características:**
+- Pooling temporal sobre todos los frames válidos  
+- MLP de dos capas  
+- Dropout = 0.3  
+- Rápido y eficiente, pero sin modelar temporalidad  
+
+Sirve para ver claramente las ventajas del LSTM.
+
+---
+
+
 ## 📊 Resultados obtenidos
 
-El modelo se entrenó por 20 épocas utilizando el split oficial `train1/test1`.
+Los dos modelos se entrenaron durante 20 épocas usando el split oficial `train1/test1`.
 
-Desempeño general:
-- Accuracy baseline aleatorio (101 clases): ≈ 0.99%
-- Mejor accuracy del modelo en test: ≈ 31%
-- Accuracy en entrenamiento: ≈ 50%
-- Se usaron las 101 clases completas
+### **Resumen de métricas**
+
+| Modelo         | Arquitectura              | Accuracy Test | Accuracy Train |
+|----------------|---------------------------|----------------|----------------|
+| Aleatorio      | Predicción uniforme       | 0.99%         | —              |
+| **ActionMLP**  | MLP con pooling temporal  | **28.1%**     | 31%            |
+| **ActionLSTM** | LSTM bidireccional        | **31%**       | 50%            |
+
+**Conclusiones:**
+- Ambos modelos superan ampliamente al baseline aleatorio.  
+- El LSTM obtiene mejor desempeño al capturar dependencias temporales.  
+- El MLP ofrece una comparación sólida y valida experimentalmente la elección del LSTM como arquitectura principal.  
+
+---
+
+## 🔍 Inferencia con nombres de clase
+
+El script `inference.py` muestra predicciones reales con nombres de clase:
 
 ---
 
@@ -59,9 +91,12 @@ Ejecuta en la terminal:
 
 `python main.py`
 
-Los pesos del modelo entrenado se guardarán en:
+Para elegir el modelo se tendrá que cambiar el parámetro `MODEL_TYPE` dentro de `main.py`.
+
+Los pesos del modelo entrenado se guardarán dependiendo del modelo utilizado:
 
 `checkpoints/action_lstm_ucf101.pth`
+`checkpoints/action_mlp_ucf101.pth`
 
 ---
 
@@ -71,7 +106,8 @@ Ejecuta:
 
  `python inference.py`
 
-Para probar diferentes videos del conjunto de prueba, cambia el parámetro `idx` dentro de `inference.py`.
+- Para probar diferentes videos del conjunto de prueba, cambia el parámetro `idx` dentro de `inference.py`.
+- Para elegir el modelo que utilizará `inference.py` se tendrá que cambiar el parámetro `MODEL_TYPE` dentro de `main.py`.
 
 ---
 
@@ -85,11 +121,12 @@ Instala las librerías requeridas:
 
 ## 📌 Posibles mejoras futuras
 
-- Uso de Graph Convolutional Networks (GCN)
-- Transformers temporales
+- Usar Graph Convolutional Networks (GCN) para modelar relaciones entre articulaciones.
+- Implementar Transformers temporales (TimeSformer, PoseFormer).
 - Modelos híbridos CNN + LSTM
-- Aumento de datos temporal
-- Fine-tuning por grupos de clases similares
+- Aplicar data augmentation temporal (jittering, frame dropping, scaling).
+- Ajustar hiperparámetros y realizar fine-tuning específico por categoría.
+- Entrenar modelos pre-entrenados en esqueletos como ST-GCN.
 
 ---
 
