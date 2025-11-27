@@ -43,7 +43,6 @@ ActionLSTM es un modelo basado en un LSTM bidireccional, diseñado para capturar
 - Entrada: secuencias de hasta 120 frames, cada frame con 51 features (x, y y score por articulación)  
 - Salida: 101 clases correspondientes al dataset UCF101  
 
----
 
 ### 🔹 2) **ActionMLP (baseline adicional)**  
 
